@@ -145,16 +145,18 @@ Claude is about to ask for permission, and clear it when it stops:
 
 Without something pinging the dashboard, an idle Claude session goes `stalled`
 (red glow) after ~60s. The cleanest fix is a `PostToolUse` hook that ticks a
-heartbeat on every tool call. Add this to `~/.claude/settings.json` (Windows:
-`C:\Users\<you>\.claude\settings.json`):
+heartbeat on every tool call.
+
+Split the config across two files so multiple agents on the same machine don't
+overwrite each other:
+
+**User-level (`~/.claude/settings.json`)** — identical for every agent on this
+machine. Contains the hook and the dashboard URL only:
 
 ```json
 {
   "env": {
-    "AV_ID":   "cc-my-session",
-    "AV_NAME": "My Session",
-    "AV_TAG":  "myrepo:main",
-    "AV_URL":  "http://localhost:4317"
+    "AV_URL": "http://localhost:4317"
   },
   "hooks": {
     "PostToolUse": [
@@ -172,14 +174,29 @@ heartbeat on every tool call. Add this to `~/.claude/settings.json` (Windows:
 }
 ```
 
-On macOS / Linux, use `report.sh` instead:
+On macOS / Linux, the hook command becomes:
+
+```
+"[ -n \"$AV_ID\" ] && \"$HOME/.claude/skills/agent-view/report.sh\" heartbeat --id \"$AV_ID\" >/dev/null 2>&1 || true"
+```
+
+**Repo-level (`<repo>/.claude/settings.local.json`)** — unique per agent. This
+file is gitignored by default, so it's the right home for per-clone identity:
 
 ```json
 {
-  "type": "command",
-  "command": "[ -n \"$AV_ID\" ] && \"$HOME/.claude/skills/agent-view/report.sh\" heartbeat --id \"$AV_ID\" >/dev/null 2>&1 || true"
+  "env": {
+    "AV_ID":   "cc-my-session",
+    "AV_NAME": "My Session",
+    "AV_TAG":  "myrepo:main"
+  }
 }
 ```
+
+Claude Code merges repo-level over user-level, so each session keeps its own
+identity. Without this split, every agent that opens
+`~/.claude/settings.json` will overwrite the previous one's `AV_ID` and they'll
+all stomp each other on the dashboard.
 
 Notes:
 - Pick a unique `AV_ID` per agent (`cc-frontend`, `cc-api`, `cc-platform`, …) so
@@ -190,10 +207,10 @@ Notes:
   needed.
 - `AV_URL` defaults to `http://localhost:4317`; set it explicitly if the
   dashboard lives on another host.
-- The hook silently no-ops if `AV_ID` is unset, so the same config is safe to
-  ship to agents that aren't being monitored.
-- Settings reload live — no Claude restart needed once the env block and hook
-  are in place. The dashboard updates on the next tool call.
+- The hook silently no-ops if `AV_ID` is unset, so the user-level config is
+  safe to ship to agents that aren't being monitored.
+- Settings reload live — no Claude restart needed once both files are in
+  place. The dashboard updates on the next tool call.
 
 ### From any HTTP client
 
