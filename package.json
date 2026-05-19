@@ -1,0 +1,26 @@
+{
+  "name": "agent-view",
+  "version": "0.1.0",
+  "description": "LAN dashboard for monitoring local Claude Code (and other) agents.",
+  "private": true,
+  "type": "module",
+  "main": "src/server.js",
+  "exports": {
+    ".": "./src/client.js",
+    "./client": "./src/client.js",
+    "./server": "./src/server.js"
+  },
+  "bin": {
+    "agentv": "bin/agentv.mjs"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
