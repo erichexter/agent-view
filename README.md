@@ -131,15 +131,63 @@ Claude is about to ask for permission, and clear it when it stops:
   "hooks": {
     "Notification": [
       { "matcher": "*", "hooks": [{ "type": "command",
-        "command": "node C:/Users/eric/Documents/github/erichexter/agent-view/bin/agentv.mjs ask --id $CLAUDE_PROJECT_DIR --prompt \"Claude needs input\"" }] }
+        "command": "node C:/path/to/agent-view/bin/agentv.mjs ask --id $CLAUDE_PROJECT_DIR --prompt \"Claude needs input\"" }] }
     ],
     "Stop": [
       { "matcher": "*", "hooks": [{ "type": "command",
-        "command": "node C:/Users/eric/Documents/github/erichexter/agent-view/bin/agentv.mjs resolved --id $CLAUDE_PROJECT_DIR" }] }
+        "command": "node C:/path/to/agent-view/bin/agentv.mjs resolved --id $CLAUDE_PROJECT_DIR" }] }
     ]
   }
 }
 ```
+
+#### Auto-heartbeat after every tool call
+
+Without something pinging the dashboard, an idle Claude session goes `stalled`
+(red glow) after ~60s. The cleanest fix is a `PostToolUse` hook that ticks a
+heartbeat on every tool call. Add this to `~/.claude/settings.json` (Windows:
+`C:\Users\<you>\.claude\settings.json`):
+
+```json
+{
+  "env": {
+    "AV_ID": "cc-my-session",
+    "AV_URL": "http://localhost:4317"
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if ($env:AV_ID) { & powershell -NoProfile -File C:\\Users\\<you>\\.claude\\skills\\agent-view\\report.ps1 heartbeat -Id $env:AV_ID 2>$null }",
+            "shell": "powershell"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+On macOS / Linux, use `report.sh` instead:
+
+```json
+{
+  "type": "command",
+  "command": "[ -n \"$AV_ID\" ] && ~/.claude/skills/agent-view/report.sh heartbeat --id \"$AV_ID\" >/dev/null 2>&1 || true"
+}
+```
+
+Notes:
+- Pick a unique `AV_ID` per agent (`cc-frontend`, `cc-api`, `cc-platform`, …) so
+  each agent gets its own card on the dashboard.
+- `AV_URL` defaults to `http://localhost:4317`; set it explicitly if the
+  dashboard lives on another host.
+- The hook silently no-ops if `AV_ID` is unset, so the same config is safe to
+  ship to agents that aren't being monitored.
+- Settings reload live — no Claude restart needed once `AV_ID` is in the `env`
+  block and the hook is in place.
 
 ### From any HTTP client
 
