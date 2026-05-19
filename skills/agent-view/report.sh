@@ -53,6 +53,12 @@ esac
 
 [ -n "${flags[agentId]:-}" ] || { echo "--id is required" >&2; exit 2; }
 
+# Fall back to AV_NAME / AV_TAG env vars when --name / --tag aren't passed.
+# This lets a heartbeat hook refresh the friendly name on every tool call
+# without re-issuing a register.
+[ -z "${flags[name]:-}" ] && [ -n "${AV_NAME:-}" ] && flags[name]="\"$AV_NAME\""
+[ -z "${flags[tag]:-}"  ] && [ -n "${AV_TAG:-}"  ] && flags[tag]="\"$AV_TAG\""
+
 # Build JSON
 json="{\"type\":\"$type\""
 for k in "${!flags[@]}"; do

@@ -42,6 +42,13 @@ if (-not $typeMap.ContainsKey($Command)) {
 }
 
 $body = @{ agentId = $Id; type = $typeMap[$Command] }
+
+# Fall back to AV_NAME / AV_TAG env vars when -Name / -Tag aren't passed.
+# This lets a heartbeat hook refresh the friendly name on every tool call
+# without re-issuing a register.
+if (-not $Name -and $env:AV_NAME) { $Name = $env:AV_NAME }
+if (-not $Tag  -and $env:AV_TAG)  { $Tag  = $env:AV_TAG }
+
 if ($Name)      { $body.name      = $Name }
 if ($Tag)       { $body.tag       = $Tag }
 if ($Task)      { $body.title     = $Task }

@@ -17,6 +17,8 @@ Pick a stable identity for the whole session and reuse it:
 
 If the user has set the env var `AV_ID`, use that as the agentId. Otherwise pick one once at the start and reuse it for every event.
 
+`report.ps1` / `report.sh` also pick up `AV_NAME` and `AV_TAG` from the environment when `-Name` / `-Tag` aren't passed explicitly. With all three (`AV_ID` + `AV_NAME` + `AV_TAG`) set in `~/.claude/settings.json`, a single PostToolUse heartbeat hook is enough — every tool call refreshes the friendly name on the dashboard. No separate `register` is needed.
+
 ## How to send events
 
 Every event is a `POST http://localhost:4317/api/events` with `Content-Type: application/json`. The only required fields are `agentId` and `type`. Use the `Bash` tool:
