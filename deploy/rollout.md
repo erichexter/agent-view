@@ -44,14 +44,16 @@ Read the file. Treat missing as `{}`. Then make these changes (and only these):
 
 **a) Add or update the PostToolUse hook.**
 
+Claude Code passes the hook event as JSON on stdin (includes `session_id` and `cwd`). The hook command parses those and exports them as env vars so `report.ps1`/`report.sh` can find the right transcript for friendly name + remote-control URL resolution.
+
 Linux/macOS command:
 ```
-bash ~/.claude/skills/agent-view/report.sh heartbeat 2>/dev/null
+json=$(cat); export CLAUDE_CODE_SESSION_ID=$(echo "$json" | grep -oE '"session_id"[[:space:]]*:[[:space:]]*"[^"]+"' | sed -E 's/.*"([^"]+)"$/\1/'); export CLAUDE_PROJECT_DIR=$(echo "$json" | grep -oE '"cwd"[[:space:]]*:[[:space:]]*"[^"]+"' | sed -E 's/.*"([^"]+)"$/\1/'); bash ~/.claude/skills/agent-view/report.sh heartbeat 2>/dev/null
 ```
 
 Windows command (PowerShell hook):
 ```
-& powershell -NoProfile -File C:\Users\<user>\.claude\skills\agent-view\report.ps1 heartbeat 2>$null
+$j = try { ($input | Out-String) | ConvertFrom-Json } catch { $null }; if ($j.session_id) { $env:CLAUDE_CODE_SESSION_ID = $j.session_id }; if ($j.cwd) { $env:CLAUDE_PROJECT_DIR = $j.cwd }; & powershell -NoProfile -File C:\Users\<user>\.claude\skills\agent-view\report.ps1 heartbeat 2>$null
 ```
 
 Hook entry shape:
@@ -66,7 +68,9 @@ Hook entry shape:
 ```
 (use `"shell": "powershell"` on Windows)
 
-If a PostToolUse entry for agent-view already exists but contains `if ($env:AV_ID)` or `if [ -n "$AV_ID" ]` — **replace it** with the new no-guard version. The old guard silently drops events when AV_ID isn't pre-set.
+If a PostToolUse entry for agent-view already exists but contains any of these patterns — **replace it** with the new stdin-parsing version:
+- `if ($env:AV_ID)` or `if [ -n "$AV_ID" ]` — the old guard silently drops events when AV_ID isn't pre-set
+- a command that calls `report.ps1`/`report.sh` directly without parsing `$input` / stdin — the friendly-name auto-resolve and `remoteUrl` features need `CLAUDE_CODE_SESSION_ID` + `CLAUDE_PROJECT_DIR` from the hook event JSON
 
 **b) Set `env.AV_URL`:**
 ```json
