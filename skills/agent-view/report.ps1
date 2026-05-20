@@ -81,7 +81,7 @@ if (-not $Tag  -and $env:AV_TAG)  { $Tag  = $env:AV_TAG }
 if (-not $Name -and $env:CLAUDE_CODE_SESSION_ID) {
   try {
     $projectDir = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { (Get-Location).Path }
-    $slug = ($projectDir -replace '[:\\/]+', '-').TrimEnd('-')
+    $slug = ($projectDir -replace '[:\\/]', '-').TrimEnd('-')
     $transcript = Join-Path $HOME ".claude/projects/$slug/$($env:CLAUDE_CODE_SESSION_ID).jsonl"
     if (Test-Path $transcript) {
       # Tail then scan in reverse — the latest title wins. 500 lines is plenty.
