@@ -1,30 +1,42 @@
 ---
 name: agent-view
-description: Report progress, completed work, token usage, and questions you need answered to the local agent-view dashboard at http://localhost:4317. Use whenever you start a Claude Code session that the user wants to monitor across multiple agents, when you begin a non-trivial task (file edits, long searches, multi-step refactors, build/test runs), when you finish one, or when you need a user decision that genuinely blocks you. Trigger when the user mentions "the dashboard", "agent-view", asks you to "report progress" or to "let me know when you're stuck", or when starting work in a project where AGENT_VIEW.md exists.
+description: Report progress, completed work, token usage, and questions you need answered to the agent-view dashboard at http://192.168.1.68:4317. Use whenever you start a Claude Code session that the user wants to monitor across multiple agents, when you begin a non-trivial task (file edits, long searches, multi-step refactors, build/test runs), when you finish one, or when you need a user decision that genuinely blocks you. Trigger when the user mentions "the dashboard", "agent-view", asks you to "report progress" or to "let me know when you're stuck", or when starting work in a project where AGENT_VIEW.md exists.
 ---
 
 # agent-view skill
 
-You are running as one of several agents the user is monitoring on a local dashboard at **http://localhost:4317**. Keep them informed by POSTing JSON events to that dashboard. Everything is one-way — they will not respond through the dashboard except to clear "needs input" flags you set.
+You are running as one of several agents the user is monitoring on the LAN dashboard at **http://192.168.1.68:4317** (services VM). Keep them informed by POSTing JSON events to that dashboard. Everything is one-way — they will not respond through the dashboard except to clear "needs input" flags you set.
 
-## Identity
+## Identity — IDs must be session-scoped, never shared
 
-Pick a stable identity for the whole session and reuse it:
+`agentId` MUST be unique per session. Two agents on the same machine that reuse the same id will stomp each other on the dashboard.
 
-- `agentId`: short, stable, unique on this machine (e.g. `cc-<project>-<short-hash>` or the session id if you have one).
-- `name`: human display name (e.g. the project name).
-- `tag`: a free-form short label like `repo:branch` or `area/sub`.
+**Forbidden:**
+- Do NOT put `AV_ID`, `AV_NAME`, or `AV_TAG` in `~/.claude/settings.json` or any user-level / shared config. That guarantees collisions the moment more than one session runs.
+- Do NOT hardcode an id in a skill, hook, or anything that more than one project/session would source.
 
-If the user has set the env var `AV_ID`, use that as the agentId. Otherwise pick one once at the start and reuse it for every event.
+**Allowed (in order of preference):**
+1. **Generate fresh at session start.** First call to `report.ps1` / `report.sh` with no `AV_ID` set will derive one (e.g. `cc-<cwd-basename>-<pid>-<random>`) and export it for the rest of the session via the hook's own scratch state.
+2. **Repo-level `.claude/settings.local.json`** — pin `AV_NAME` and `AV_TAG` per project (the human-readable bits), but leave `AV_ID` unset so it gets generated. `settings.local.json` is git-ignored and per-checkout, so each working copy gets its own.
+3. **Per-session env var** — if you're scripting a spawn (e.g. wolf-hook-agent), set `AV_ID=cc-<issue>-<timestamp>` in that child process only.
 
-`report.ps1` / `report.sh` also pick up `AV_NAME` and `AV_TAG` from the environment when `-Name` / `-Tag` aren't passed explicitly. With all three (`AV_ID` + `AV_NAME` + `AV_TAG`) set in `~/.claude/settings.json`, a single PostToolUse heartbeat hook is enough — every tool call refreshes the friendly name on the dashboard. No separate `register` is needed.
+At user level (`~/.claude/settings.json`) only set:
+- `AV_URL=http://192.168.1.68:4317`
+- the PostToolUse hook that calls `report.ps1` / `report.sh`
+
+Everything that varies per agent — id, name, tag — lives at the session or repo scope.
+
+Fields:
+- `agentId`: short, unique per session (e.g. `cc-<project>-<pid>` or the Claude session id when available).
+- `name`: human display name (e.g. the project name). Per-repo via `AV_NAME`.
+- `tag`: short label like `repo:branch` or `area/sub`. Per-repo via `AV_TAG`.
 
 ## How to send events
 
-Every event is a `POST http://localhost:4317/api/events` with `Content-Type: application/json`. The only required fields are `agentId` and `type`. Use the `Bash` tool:
+Every event is a `POST http://192.168.1.68:4317/api/events` with `Content-Type: application/json`. The only required fields are `agentId` and `type`. Use the `Bash` tool:
 
 ```bash
-curl -sf -X POST http://localhost:4317/api/events \
+curl -sf -X POST http://192.168.1.68:4317/api/events \
   -H 'Content-Type: application/json' \
   -d '{"agentId":"YOUR_ID","name":"YOUR_NAME","tag":"YOUR_TAG","type":"register"}' \
   > /dev/null
