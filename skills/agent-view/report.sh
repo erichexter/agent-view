@@ -12,7 +12,7 @@
 # AV_URL defaults to http://localhost:4317.
 
 set -eu
-URL="${AV_URL:-http://localhost:4317}"
+URL="${AV_URL:-http://192.168.1.68:4317}"
 cmd="${1:-}"; shift || true
 
 declare -A flags=()
@@ -32,6 +32,7 @@ while (( $# )); do
     --summary)    flags[summary]="\"$val\"" ;;
     --tokens-in)  flags[tokensIn]="$val" ;;
     --tokens-out) flags[tokensOut]="$val" ;;
+    --stall-after-ms) flags[stallAfterMs]="$val" ;;
     --task-id)    flags[taskId]="\"$val\"" ;;
     *) echo "unknown flag: $key" >&2; exit 2 ;;
   esac
@@ -51,7 +52,30 @@ case "$cmd" in
   *) echo "usage: report.sh <register|start|update|done|ask|resolved|heartbeat|log|bye> [--flag value ...]" >&2; exit 2 ;;
 esac
 
-[ -n "${flags[agentId]:-}" ] || { echo "--id is required" >&2; exit 2; }
+# Resolve agentId. Precedence: --id flag > $AV_ID > per-project state file > auto-generate.
+# IDs must be session/project-scoped, never shared at user level.
+if [ -z "${flags[agentId]:-}" ] && [ -n "${AV_ID:-}" ]; then
+  flags[agentId]="\"$AV_ID\""
+fi
+if [ -z "${flags[agentId]:-}" ]; then
+  project_dir="${CLAUDE_PROJECT_DIR:-$PWD}"
+  state_dir="$project_dir/.claude"
+  state_file="$state_dir/.agent-view-id"
+  if [ -f "$state_file" ]; then
+    av_id=$(cat "$state_file" 2>/dev/null | tr -d '\n\r ')
+  else
+    av_id=""
+  fi
+  if [ -z "$av_id" ]; then
+    base_name=$(basename "$project_dir" | tr -c 'a-zA-Z0-9_-' '-')
+    [ -z "$base_name" ] && base_name="session"
+    rand=$(od -An -N4 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n' || echo $$)
+    av_id="cc-$base_name-$rand"
+    mkdir -p "$state_dir" 2>/dev/null && printf '%s' "$av_id" > "$state_file" 2>/dev/null || true
+  fi
+  flags[agentId]="\"$av_id\""
+fi
+[ -n "${flags[agentId]:-}" ] || exit 0
 
 # Fall back to AV_NAME / AV_TAG env vars when --name / --tag aren't passed.
 # This lets a heartbeat hook refresh the friendly name on every tool call

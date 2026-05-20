@@ -64,6 +64,29 @@ Send `task_start` for: file edits across multiple files, long greps/searches, ru
 
 When you know them (from a tool that returns usage), include `tokensIn` and `tokensOut` on `task_complete`. If unknown, omit them.
 
+### Long-running tasks — `stallAfterMs`
+
+The dashboard flags an agent as `stalled` (orange) if `status='working'` and no event arrives for >60s. For tasks you know will take longer (a `Bash` call with a 10-minute timeout, a big migration, a long test run), pass `stallAfterMs` on `task_start` so the dashboard waits that long before flagging stalled:
+
+```
+report.ps1 start -Task "Migration"  -StallAfterMs 600000
+report.sh  start --task "Migration" --stall-after-ms 600000
+```
+
+Recommended: set `stallAfterMs` to the tool's own timeout plus ~30s of buffer. `task_complete` clears it.
+
+**PreToolUse hook recipe** (Claude Code) — read `tool_input.timeout` off stdin and forward it as `stallAfterMs` automatically so long Bash calls don't false-alarm:
+
+```powershell
+# ~/.claude/hooks/agent-view-pretool.ps1
+$ev = $input | Out-String | ConvertFrom-Json
+if ($ev.tool_name -eq 'Bash' -and $ev.tool_input.timeout) {
+  $ms = [int]$ev.tool_input.timeout + 30000
+  $title = "Bash: " + $ev.tool_input.command.Substring(0, [Math]::Min(40, $ev.tool_input.command.Length))
+  & powershell -NoProfile -File $PSScriptRoot\..\skills\agent-view\report.ps1 start -Task $title -StallAfterMs $ms 2>$null
+}
+```
+
 ## Rules
 
 1. **Never block on the dashboard.** If the POST fails, ignore the failure and continue.

@@ -117,10 +117,12 @@ app.post('/api/events', (req, res) => {
         title: ev.title || 'Untitled task',
         detail: ev.detail || '',
         startedAt: Date.now(),
+        stallAfterMs: Number.isFinite(ev.stallAfterMs) ? ev.stallAfterMs : null,
       };
       startTask(agentId, t);
       agent = upsertAgent(agentId, {
-        name, status: 'working', currentTask: t, needsInput: null, ...cronPatch,
+        name, status: 'working', currentTask: t, needsInput: null,
+        stallAfterMs: t.stallAfterMs, ...cronPatch,
       });
       task = t;
       break;
@@ -165,6 +167,7 @@ app.post('/api/events', (req, res) => {
         status: 'idle',
         currentTask: null,
         needsInput: null,
+        stallAfterMs: null,
         completedCount: (prev.completedCount || 0) + 1,
         totalTokens: (prev.totalTokens || 0) + (record.tokens || 0),
         ...cronPatch,
