@@ -29,7 +29,8 @@ function applyCompact() {
 }
 
 function effectiveStatus(a) {
-  if (a.status === 'working' && a.lastSeen && (Date.now() - a.lastSeen) > STALL_MS) return 'stalled';
+  const threshold = (a.stallAfterMs && a.stallAfterMs > 0) ? a.stallAfterMs : STALL_MS;
+  if (a.status === 'working' && a.lastSeen && (Date.now() - a.lastSeen) > threshold) return 'stalled';
   return a.status;
 }
 function statusLabel(s) {

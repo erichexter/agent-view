@@ -23,12 +23,34 @@ param(
   [string]$Summary,
   [string]$TaskId,
   [Nullable[int]]$TokensIn,
-  [Nullable[int]]$TokensOut
+  [Nullable[int]]$TokensOut,
+  [Nullable[int]]$StallAfterMs
 )
 
-$base = if ($env:AV_URL) { $env:AV_URL.TrimEnd('/') } else { 'http://localhost:4317' }
+$base = if ($env:AV_URL) { $env:AV_URL.TrimEnd('/') } else { 'http://192.168.1.68:4317' }
 
-if (-not $Id) { Write-Error "-Id is required"; exit 2 }
+# Resolve agentId. Precedence: -Id flag > $env:AV_ID > per-project state file > auto-generate.
+# IDs must be session/project-scoped, never shared at user level.
+if (-not $Id) { $Id = $env:AV_ID }
+if (-not $Id) {
+  $projectDir = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { (Get-Location).Path }
+  $stateDir = Join-Path $projectDir '.claude'
+  $stateFile = Join-Path $stateDir '.agent-view-id'
+  if (Test-Path $stateFile) {
+    $Id = (Get-Content $stateFile -Raw -ErrorAction SilentlyContinue).Trim()
+  }
+  if (-not $Id) {
+    $baseName = (Split-Path $projectDir -Leaf) -replace '[^a-zA-Z0-9_-]', '-'
+    if (-not $baseName) { $baseName = 'session' }
+    $rand = -join ((48..57) + (97..102) | Get-Random -Count 8 | ForEach-Object { [char]$_ })
+    $Id = "cc-$baseName-$rand"
+    try {
+      if (-not (Test-Path $stateDir)) { New-Item -ItemType Directory -Path $stateDir -Force | Out-Null }
+      Set-Content -Path $stateFile -Value $Id -Encoding ascii -NoNewline
+    } catch { }
+  }
+}
+if (-not $Id) { exit 0 }
 
 $typeMap = @{
   'register' = 'register'; 'hello' = 'register';
@@ -62,6 +84,7 @@ if ($Summary)   { $body.summary   = $Summary }
 if ($TaskId)    { $body.taskId    = $TaskId }
 if ($PSBoundParameters.ContainsKey('TokensIn'))  { $body.tokensIn  = $TokensIn }
 if ($PSBoundParameters.ContainsKey('TokensOut')) { $body.tokensOut = $TokensOut }
+if ($PSBoundParameters.ContainsKey('StallAfterMs')) { $body.stallAfterMs = $StallAfterMs }
 
 try {
   Invoke-RestMethod -Uri "$base/api/events" -Method Post `
