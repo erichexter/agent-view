@@ -29,9 +29,25 @@ param(
 
 $base = if ($env:AV_URL) { $env:AV_URL.TrimEnd('/') } else { 'http://192.168.1.68:4317' }
 
-# Resolve agentId. Precedence: -Id flag > $env:AV_ID > per-project state file > auto-generate.
-# IDs must be session/project-scoped, never shared at user level.
+# Resolve agentId. Precedence:
+#   -Id flag > $env:AV_ID > Claude Code session id > per-project state file > auto-generate
+#
+# Why session id beats the state file: a single Claude Code session can `cd` into
+# different project subdirs mid-session — each tool call's hook event reports a
+# different cwd, which would otherwise auto-generate a NEW id per cwd and fragment
+# the session across multiple dashboard cards. Session id is stable for the lifetime
+# of the Claude Code process, so one session = one card.
+#
+# A pre-seeded state file at $HOME/.claude/.agent-view-id is honored AHEAD of session
+# id when CLAUDE_CODE_SESSION_ID is unset (non-Claude-Code agents).
 if (-not $Id) { $Id = $env:AV_ID }
+if (-not $Id -and $env:CLAUDE_CODE_SESSION_ID) {
+  $sid = $env:CLAUDE_CODE_SESSION_ID
+  # Drop dashes and take 8 hex chars; UUIDs and "session_XX..." both produce a stable suffix.
+  $clean = ($sid -replace '[^A-Za-z0-9]', '')
+  if ($clean.Length -ge 8) { $clean = $clean.Substring(0, 8) }
+  $Id = "cc-$clean"
+}
 if (-not $Id) {
   $projectDir = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { (Get-Location).Path }
   $stateDir = Join-Path $projectDir '.claude'
