@@ -312,6 +312,7 @@ function render() {
         <div class="barhead">
           <span class="grip" title="drag to reorder">⋮⋮</span>
           <span class="name">${escapeHTML(a.name || a.id)}</span>
+          ${a.remoteUrl ? `<a class="remote-link" href="${escapeHTML(a.remoteUrl)}" target="_blank" rel="noopener" title="open in Claude (remote control)">↗</a>` : ''}
           ${tagChip}
           <span class="status ${eff}">${statusLabel(eff)}</span>
         </div>
@@ -354,7 +355,7 @@ function renderCompact(agents) {
           return `
             <tr class="row is-${eff}${needs ? ' needs-input' : ''}" data-id="${escapeHTML(a.id)}" draggable="true">
               <td class="status-cell"><span class="status ${eff}">${statusLabel(eff)}</span></td>
-              <td class="agent">${escapeHTML(a.name || a.id)}</td>
+              <td class="agent">${escapeHTML(a.name || a.id)}${a.remoteUrl ? ` <a class="remote-link" href="${escapeHTML(a.remoteUrl)}" target="_blank" rel="noopener" title="open in Claude (remote control)">↗</a>` : ''}</td>
               <td class="tag-cell">${a.tag ? `<span class="tag">${escapeHTML(a.tag)}</span>` : ''}</td>
               <td class="task">${cur ? escapeHTML(cur.title) : (a.lastTaskTitle ? `<span class="dim">${escapeHTML(a.lastTaskTitle)}</span>` : '—')}${needs ? ` <span class="needs-mark">⚠ ${escapeHTML(needs.prompt)}</span>` : ''}</td>
               <td class="logcell dim">${a.lastLog?.message ? escapeHTML(a.lastLog.message) : ''}</td>

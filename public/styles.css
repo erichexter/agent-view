@@ -266,6 +266,15 @@ body.compact .grid { display: block; }
   user-select: none;
 }
 .card .barhead .name { flex: 1; }
+.remote-link {
+  color: var(--fg-muted);
+  text-decoration: none;
+  font-size: 12px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+}
+.remote-link:hover { color: var(--accent); border-color: var(--accent); }
 .card .name {
   color: var(--accent); font-weight: 700;
 }

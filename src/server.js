@@ -89,6 +89,7 @@ app.post('/api/events', (req, res) => {
   if (ev.nextCronAt !== undefined)  cronPatch.nextCronAt  = ev.nextCronAt;
   if (ev.nextCronName !== undefined) cronPatch.nextCronName = ev.nextCronName;
   if (ev.tag !== undefined) cronPatch.tag = ev.tag;
+  if (ev.remoteUrl !== undefined) cronPatch.remoteUrl = ev.remoteUrl;
   let agent;
   let task;
 

@@ -117,6 +117,12 @@ if [ -z "${flags[name]:-}" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
       esc=$(printf '%s' "$title" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
       flags[name]="\"$esc\""
     fi
+    # Remote-control URL: latest claude.ai/code/session_* in the transcript.
+    remote_url=$(tail -n 500 "$transcript" 2>/dev/null | $reader 2>/dev/null \
+      | grep -m1 -oE 'https://claude\.ai/code/session_[A-Za-z0-9]+' | head -n1)
+    if [ -n "$remote_url" ]; then
+      flags[remoteUrl]="\"$remote_url\""
+    fi
   fi
 fi
 
