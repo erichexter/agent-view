@@ -1,0 +1,20 @@
+[Unit]
+Description=agent-view LAN dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=svc
+WorkingDirectory=/home/svc/agent-view
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=NODE_ENV=production
+Environment=HOST=0.0.0.0
+Environment=PORT=4317
+
+[Install]
+WantedBy=multi-user.target

@@ -13,6 +13,12 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
+app.use((err, _req, res, next) => {
+  if (err && (err.type === 'entity.parse.failed' || err instanceof SyntaxError)) {
+    return res.status(400).json({ error: 'invalid json' });
+  }
+  next(err);
+});
 app.use((req, _res, next) => {
   if (process.env.AV_LOG === '1') console.log(req.method, req.url);
   next();
@@ -23,6 +29,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Health
 app.get('/api/health', (_req, res) => res.json({ ok: true, time: Date.now() }));
+app.get('/health', (_req, res) => res.json({ ok: true, time: Date.now() }));
 
 // Snapshot
 app.get('/api/snapshot', (_req, res) => res.json(snapshot()));
