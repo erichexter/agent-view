@@ -52,10 +52,20 @@ case "$cmd" in
   *) echo "usage: report.sh <register|start|update|done|ask|resolved|heartbeat|log|bye> [--flag value ...]" >&2; exit 2 ;;
 esac
 
-# Resolve agentId. Precedence: --id flag > $AV_ID > per-project state file > auto-generate.
-# IDs must be session/project-scoped, never shared at user level.
+# Resolve agentId. Precedence:
+#   --id flag > $AV_ID > Claude Code session id > per-project state file > auto-generate
+#
+# Session id beats the state file because a single Claude Code session can `cd` into
+# different project subdirs mid-session — each tool call's hook event reports a
+# different cwd, which would otherwise auto-generate a new id per cwd and fragment
+# the session across multiple dashboard cards. Session id is stable per session.
 if [ -z "${flags[agentId]:-}" ] && [ -n "${AV_ID:-}" ]; then
   flags[agentId]="\"$AV_ID\""
+fi
+if [ -z "${flags[agentId]:-}" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+  clean=$(printf '%s' "$CLAUDE_CODE_SESSION_ID" | tr -cd 'A-Za-z0-9')
+  short=$(printf '%s' "$clean" | cut -c1-8)
+  flags[agentId]="\"cc-$short\""
 fi
 if [ -z "${flags[agentId]:-}" ]; then
   project_dir="${CLAUDE_PROJECT_DIR:-$PWD}"
