@@ -83,6 +83,43 @@ fi
 [ -z "${flags[name]:-}" ] && [ -n "${AV_NAME:-}" ] && flags[name]="\"$AV_NAME\""
 [ -z "${flags[tag]:-}"  ] && [ -n "${AV_TAG:-}"  ] && flags[tag]="\"$AV_TAG\""
 
+# Final fallback for --name: read the Claude Code session transcript and pull
+# the latest custom-title (user-set via /rename) or ai-title (auto-named).
+# This lets the dashboard reflect /rename without any settings/env edits.
+#
+# Transcript lives at:
+#   $HOME/.claude/projects/<cwd-slug>/<CLAUDE_CODE_SESSION_ID>.jsonl
+# where <cwd-slug> is the absolute project path with `:\/` replaced by `-`.
+if [ -z "${flags[name]:-}" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+  project_dir="${CLAUDE_PROJECT_DIR:-$PWD}"
+  # Slugify: replace `:`, `\`, `/` (one or more) with a single `-`, then strip trailing.
+  slug=$(echo "$project_dir" | sed -E 's#[:\\/]+#-#g; s#-+$##')
+  transcript="$HOME/.claude/projects/$slug/$CLAUDE_CODE_SESSION_ID.jsonl"
+  if [ -f "$transcript" ]; then
+    # tac scans newest-first; fall back if tac is unavailable.
+    if command -v tac >/dev/null 2>&1; then
+      reader="tac"
+    else
+      reader="tail -r"
+    fi
+    title=$(tail -n 500 "$transcript" 2>/dev/null | $reader 2>/dev/null \
+      | grep -m1 -oE '"type"[[:space:]]*:[[:space:]]*"custom-title"[^}]*"customTitle"[[:space:]]*:[[:space:]]*"[^"]+"' \
+      | grep -oE '"customTitle"[[:space:]]*:[[:space:]]*"[^"]+"' \
+      | sed -E 's/.*"customTitle"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
+    if [ -z "$title" ]; then
+      title=$(tail -n 500 "$transcript" 2>/dev/null | $reader 2>/dev/null \
+        | grep -m1 -oE '"type"[[:space:]]*:[[:space:]]*"ai-title"[^}]*"aiTitle"[[:space:]]*:[[:space:]]*"[^"]+"' \
+        | grep -oE '"aiTitle"[[:space:]]*:[[:space:]]*"[^"]+"' \
+        | sed -E 's/.*"aiTitle"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
+    fi
+    if [ -n "$title" ]; then
+      # JSON-escape any embedded quotes/backslashes.
+      esc=$(printf '%s' "$title" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+      flags[name]="\"$esc\""
+    fi
+  fi
+fi
+
 # Build JSON
 json="{\"type\":\"$type\""
 for k in "${!flags[@]}"; do

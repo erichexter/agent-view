@@ -71,6 +71,40 @@ $body = @{ agentId = $Id; type = $typeMap[$Command] }
 if (-not $Name -and $env:AV_NAME) { $Name = $env:AV_NAME }
 if (-not $Tag  -and $env:AV_TAG)  { $Tag  = $env:AV_TAG }
 
+# Final fallback for $Name: read the Claude Code session transcript and pull
+# the latest `custom-title` (user-set via /rename) or `ai-title` (auto-named).
+# This lets the dashboard reflect /rename without any settings/env edits.
+#
+# Transcript lives at:
+#   $HOME/.claude/projects/<cwd-slug>/<CLAUDE_CODE_SESSION_ID>.jsonl
+# where <cwd-slug> is the absolute project path with `:\/` replaced by `-`.
+if (-not $Name -and $env:CLAUDE_CODE_SESSION_ID) {
+  try {
+    $projectDir = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { (Get-Location).Path }
+    $slug = ($projectDir -replace '[:\\/]+', '-').TrimEnd('-')
+    $transcript = Join-Path $HOME ".claude/projects/$slug/$($env:CLAUDE_CODE_SESSION_ID).jsonl"
+    if (Test-Path $transcript) {
+      # Tail then scan in reverse — the latest title wins. 500 lines is plenty.
+      $tail = Get-Content $transcript -Tail 500 -ErrorAction Stop
+      [array]::Reverse($tail)
+      $title = $null
+      foreach ($line in $tail) {
+        if ($line -match '"type"\s*:\s*"custom-title".*?"customTitle"\s*:\s*"([^"]+)"') {
+          $title = $Matches[1]; break
+        }
+      }
+      if (-not $title) {
+        foreach ($line in $tail) {
+          if ($line -match '"type"\s*:\s*"ai-title".*?"aiTitle"\s*:\s*"([^"]+)"') {
+            $title = $Matches[1]; break
+          }
+        }
+      }
+      if ($title) { $Name = $title }
+    }
+  } catch { }
+}
+
 if ($Name)      { $body.name      = $Name }
 if ($Tag)       { $body.tag       = $Tag }
 if ($Task)      { $body.title     = $Task }
