@@ -43,6 +43,10 @@ When running under Claude Code (`$env:CLAUDE_CODE_SESSION_ID` is set), `report.p
 
 So `/rename Yodlee Test` flows to the dashboard automatically on the next hook heartbeat.
 
+### Remote-control link (Claude Code)
+
+The same transcript scan also picks up the **remote-control URL** (`https://claude.ai/code/session_...`, emitted when `remoteControlAtStartup` is on or `/remote-control` was run) and sends it as `remoteUrl`. The dashboard renders a small `↗` link next to the agent name so you can jump into the live session from the iOS app or web — no extra config.
+
 ## How to send events
 
 Every event is a `POST http://192.168.1.68:4317/api/events` with `Content-Type: application/json`. The only required fields are `agentId` and `type`. Use the `Bash` tool:
