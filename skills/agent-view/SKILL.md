@@ -31,6 +31,18 @@ Fields:
 - `name`: human display name (e.g. the project name). Per-repo via `AV_NAME`.
 - `tag`: short label like `repo:branch` or `area/sub`. Per-repo via `AV_TAG`.
 
+### Friendly name auto-resolution (Claude Code)
+
+When running under Claude Code (`$env:CLAUDE_CODE_SESSION_ID` is set), `report.ps1` and `report.sh` will read the session transcript and pull the latest `custom-title` (user-set via `/rename`) or `ai-title` (auto-named) as the `name`, without any settings edits. Precedence for `name`:
+
+1. `-Name` / `--name` flag
+2. `$env:AV_NAME`
+3. `custom-title` from the transcript (i.e. whatever `/rename` last set)
+4. `ai-title` from the transcript
+5. unset (dashboard uses `agentId` as the display name)
+
+So `/rename Yodlee Test` flows to the dashboard automatically on the next hook heartbeat.
+
 ## How to send events
 
 Every event is a `POST http://192.168.1.68:4317/api/events` with `Content-Type: application/json`. The only required fields are `agentId` and `type`. Use the `Bash` tool:
