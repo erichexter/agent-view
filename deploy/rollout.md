@@ -100,7 +100,9 @@ $id = (Get-Content "$HOME\.claude\.agent-view-id" -ErrorAction SilentlyContinue)
 
 ### 4. (Optional) Pin a friendly name for this project
 
-If this project should show a specific name/tag on the dashboard (instead of an auto-generated `cc-<cwd>-<hash>`), add to the project's `.claude/settings.json` (NOT user-level):
+You usually don't need to. When running under Claude Code, the scripts auto-resolve the agent's display name from the session transcript: they read `~/.claude/projects/<cwd-slug>/<CLAUDE_CODE_SESSION_ID>.jsonl` and pull the latest `custom-title` (set by `/rename`) or `ai-title` (auto-named). So `/rename Yodlee Test` flows to the dashboard on the next hook tick — no settings edits.
+
+Override that auto-resolution only when you want to:
 
 ```json
 {
@@ -111,7 +113,9 @@ If this project should show a specific name/tag on the dashboard (instead of an 
 }
 ```
 
-The ID still auto-generates and persists to `<project>/.claude/.agent-view-id`.
+Add to the **project's** `.claude/settings.json` (NOT user-level). The ID still auto-generates and persists to `<project>/.claude/.agent-view-id`.
+
+**`name` precedence:** `-Name`/`--name` flag > `$AV_NAME` > transcript `custom-title` > transcript `ai-title` > unset (dashboard uses id).
 
 ## Report back
 
