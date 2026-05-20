@@ -267,14 +267,17 @@ body.compact .grid { display: block; }
 }
 .card .barhead .name { flex: 1; }
 .remote-link {
-  color: var(--fg-muted);
+  color: var(--accent);
   text-decoration: none;
-  font-size: 12px;
-  padding: 0 4px;
-  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border: 1px solid var(--accent);
   border-radius: 2px;
+  line-height: 1;
 }
-.remote-link:hover { color: var(--accent); border-color: var(--accent); }
+.remote-link::before { content: "remote "; font-size: 10px; letter-spacing: 1px; font-weight: 400; }
+.remote-link:hover { background: var(--accent); color: #0a0a0a; }
 .card .name {
   color: var(--accent); font-weight: 700;
 }
