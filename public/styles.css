@@ -114,6 +114,7 @@ section { margin-top: 18px; }
 .tab.status-stalled .glyph { color: #fb923c; }
 
 /* ─── Triage banner ──────────────────────────────────────────────── */
+.triage[hidden] { display: none; }
 .triage {
   border: 1px solid var(--alert);
   background: rgba(255,107,107,0.08);
