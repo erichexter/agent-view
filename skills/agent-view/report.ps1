@@ -23,12 +23,50 @@ param(
   [string]$Summary,
   [string]$TaskId,
   [Nullable[int]]$TokensIn,
-  [Nullable[int]]$TokensOut
+  [Nullable[int]]$TokensOut,
+  [Nullable[int]]$StallAfterMs
 )
 
-$base = if ($env:AV_URL) { $env:AV_URL.TrimEnd('/') } else { 'http://localhost:4317' }
+$base = if ($env:AV_URL) { $env:AV_URL.TrimEnd('/') } else { 'http://192.168.1.68:4317' }
 
-if (-not $Id) { Write-Error "-Id is required"; exit 2 }
+# Resolve agentId. Precedence:
+#   -Id flag > $env:AV_ID > Claude Code session id > per-project state file > auto-generate
+#
+# Why session id beats the state file: a single Claude Code session can `cd` into
+# different project subdirs mid-session — each tool call's hook event reports a
+# different cwd, which would otherwise auto-generate a NEW id per cwd and fragment
+# the session across multiple dashboard cards. Session id is stable for the lifetime
+# of the Claude Code process, so one session = one card.
+#
+# A pre-seeded state file at $HOME/.claude/.agent-view-id is honored AHEAD of session
+# id when CLAUDE_CODE_SESSION_ID is unset (non-Claude-Code agents).
+if (-not $Id) { $Id = $env:AV_ID }
+if (-not $Id -and $env:CLAUDE_CODE_SESSION_ID) {
+  $sid = $env:CLAUDE_CODE_SESSION_ID
+  # Drop dashes and take 8 hex chars; UUIDs and "session_XX..." both produce a stable suffix.
+  $clean = ($sid -replace '[^A-Za-z0-9]', '')
+  if ($clean.Length -ge 8) { $clean = $clean.Substring(0, 8) }
+  $Id = "cc-$clean"
+}
+if (-not $Id) {
+  $projectDir = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { (Get-Location).Path }
+  $stateDir = Join-Path $projectDir '.claude'
+  $stateFile = Join-Path $stateDir '.agent-view-id'
+  if (Test-Path $stateFile) {
+    $Id = (Get-Content $stateFile -Raw -ErrorAction SilentlyContinue).Trim()
+  }
+  if (-not $Id) {
+    $baseName = (Split-Path $projectDir -Leaf) -replace '[^a-zA-Z0-9_-]', '-'
+    if (-not $baseName) { $baseName = 'session' }
+    $rand = -join ((48..57) + (97..102) | Get-Random -Count 8 | ForEach-Object { [char]$_ })
+    $Id = "cc-$baseName-$rand"
+    try {
+      if (-not (Test-Path $stateDir)) { New-Item -ItemType Directory -Path $stateDir -Force | Out-Null }
+      Set-Content -Path $stateFile -Value $Id -Encoding ascii -NoNewline
+    } catch { }
+  }
+}
+if (-not $Id) { exit 0 }
 
 $typeMap = @{
   'register' = 'register'; 'hello' = 'register';
@@ -42,8 +80,58 @@ if (-not $typeMap.ContainsKey($Command)) {
 }
 
 $body = @{ agentId = $Id; type = $typeMap[$Command] }
+
+# Fall back to AV_NAME / AV_TAG env vars when -Name / -Tag aren't passed.
+# This lets a heartbeat hook refresh the friendly name on every tool call
+# without re-issuing a register.
+if (-not $Name -and $env:AV_NAME) { $Name = $env:AV_NAME }
+if (-not $Tag  -and $env:AV_TAG)  { $Tag  = $env:AV_TAG }
+
+# Final fallback for $Name: read the Claude Code session transcript and pull
+# the latest `custom-title` (user-set via /rename) or `ai-title` (auto-named).
+# This lets the dashboard reflect /rename without any settings/env edits.
+#
+# Transcript lives at:
+#   $HOME/.claude/projects/<cwd-slug>/<CLAUDE_CODE_SESSION_ID>.jsonl
+# where <cwd-slug> is the absolute project path with `:\/` replaced by `-`.
+$remoteUrl = $null
+if ($env:CLAUDE_CODE_SESSION_ID) {
+  try {
+    $projectDir = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { (Get-Location).Path }
+    $slug = ($projectDir -replace '[:\\/]', '-').TrimEnd('-')
+    $transcript = Join-Path $HOME ".claude/projects/$slug/$($env:CLAUDE_CODE_SESSION_ID).jsonl"
+    if (Test-Path $transcript) {
+      # Tail then scan in reverse — the latest entries win. 500 lines is plenty.
+      $tail = Get-Content $transcript -Tail 500 -ErrorAction Stop
+      [array]::Reverse($tail)
+      # Fallback name from transcript: latest custom-title (set by /rename) then ai-title.
+      if (-not $Name) {
+        foreach ($line in $tail) {
+          if ($line -match '"type"\s*:\s*"custom-title".*?"customTitle"\s*:\s*"([^"]+)"') {
+            $Name = $Matches[1]; break
+          }
+        }
+        if (-not $Name) {
+          foreach ($line in $tail) {
+            if ($line -match '"type"\s*:\s*"ai-title".*?"aiTitle"\s*:\s*"([^"]+)"') {
+              $Name = $Matches[1]; break
+            }
+          }
+        }
+      }
+      # Remote-control URL: latest claude.ai/code/session_* in the transcript.
+      foreach ($line in $tail) {
+        if ($line -match '(https://claude\.ai/code/session_[A-Za-z0-9]+)') {
+          $remoteUrl = $Matches[1]; break
+        }
+      }
+    }
+  } catch { }
+}
+
 if ($Name)      { $body.name      = $Name }
 if ($Tag)       { $body.tag       = $Tag }
+if ($remoteUrl) { $body.remoteUrl = $remoteUrl }
 if ($Task)      { $body.title     = $Task }
 if ($Detail)    { $body.detail    = $Detail }
 if ($Prompt)    { $body.prompt    = $Prompt }
@@ -55,6 +143,7 @@ if ($Summary)   { $body.summary   = $Summary }
 if ($TaskId)    { $body.taskId    = $TaskId }
 if ($PSBoundParameters.ContainsKey('TokensIn'))  { $body.tokensIn  = $TokensIn }
 if ($PSBoundParameters.ContainsKey('TokensOut')) { $body.tokensOut = $TokensOut }
+if ($PSBoundParameters.ContainsKey('StallAfterMs')) { $body.stallAfterMs = $StallAfterMs }
 
 try {
   Invoke-RestMethod -Uri "$base/api/events" -Method Post `

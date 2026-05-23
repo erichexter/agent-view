@@ -114,7 +114,7 @@ section { margin-top: 18px; }
 .tab.status-stalled .glyph { color: #fb923c; }
 
 /* ─── Triage banner ──────────────────────────────────────────────── */
-.triage[hidden] { display: none; }
+.triage[hidden] { display: none !important; }
 .triage {
   border: 1px solid var(--alert);
   background: rgba(255,107,107,0.08);
@@ -266,6 +266,18 @@ body.compact .grid { display: block; }
   user-select: none;
 }
 .card .barhead .name { flex: 1; }
+.remote-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  line-height: 1;
+}
+.remote-link::before { content: "remote "; font-size: 10px; letter-spacing: 1px; font-weight: 400; }
+.remote-link:hover { background: var(--accent); color: #0a0a0a; }
 .card .name {
   color: var(--accent); font-weight: 700;
 }

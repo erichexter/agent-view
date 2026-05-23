@@ -31,7 +31,8 @@ function applyCompact() {
 }
 
 function effectiveStatus(a) {
-  if (a.status === 'working' && a.lastSeen && (Date.now() - a.lastSeen) > STALL_MS) return 'stalled';
+  const threshold = (a.stallAfterMs && a.stallAfterMs > 0) ? a.stallAfterMs : STALL_MS;
+  if (a.status === 'working' && a.lastSeen && (Date.now() - a.lastSeen) > threshold) return 'stalled';
   return a.status;
 }
 function statusLabel(s) {
@@ -278,6 +279,9 @@ function render() {
     const since = cur?.startedAt
       ? `<span><span class="k">since</span> <span data-rel-ts="${cur.startedAt}">${fmtRel(cur.startedAt)}</span></span>` : '';
     const lastSeen = `<span><span class="k">⏱</span> <span data-rel-ts="${a.lastSeen}">${fmtRel(a.lastSeen)}</span></span>`;
+    const lastHeartbeat = a.lastHeartbeatAt
+      ? `<span title="last heartbeat"><span class="k">♡</span> <span data-rel-ts="${a.lastHeartbeatAt}">${fmtRel(a.lastHeartbeatAt)}</span></span>`
+      : ``;
     const cronCount = a.cronsActive
       ? `<span><span class="k">⏲</span> ${a.cronsActive} cron${a.cronsActive === 1 ? '' : 's'}</span>` : '';
     const nextCron = a.nextCronAt
@@ -296,6 +300,7 @@ function render() {
         <div class="barhead">
           <span class="grip" title="drag to reorder">⋮⋮</span>
           <span class="name">${escapeHTML(a.name || a.id)}</span>
+          ${a.remoteUrl ? `<a class="remote-link" href="${escapeHTML(a.remoteUrl)}" target="_blank" rel="noopener" title="open in Claude (remote control)">↗</a>` : ''}
           ${tagChip}
           <span class="status ${eff}">${statusLabel(eff)}</span>
         </div>
@@ -306,6 +311,7 @@ function render() {
           ${needsBlock}
           <div class="meta-row">
             ${since || lastSeen}
+            ${!cur && lastHeartbeat}
             <span><span class="k">✓</span> ${a.completedCount || 0} done</span>
             <span><span class="k">∑</span> ${fmtTokens(a.totalTokens || 0)} tok</span>
             ${burnSpan}
@@ -339,7 +345,7 @@ function renderCompact(agents) {
           return `
             <tr class="row is-${eff}${needs ? ' needs-input' : ''}" data-id="${escapeHTML(a.id)}" draggable="true">
               <td class="status-cell"><span class="status ${eff}">${statusLabel(eff)}</span></td>
-              <td class="agent">${escapeHTML(a.name || a.id)}</td>
+              <td class="agent">${escapeHTML(a.name || a.id)}${a.remoteUrl ? ` <a class="remote-link" href="${escapeHTML(a.remoteUrl)}" target="_blank" rel="noopener" title="open in Claude (remote control)">↗</a>` : ''}</td>
               <td class="tag-cell">${a.tag ? `<span class="tag">${escapeHTML(a.tag)}</span>` : ''}</td>
               <td class="task">${cur ? escapeHTML(cur.title) : (a.lastTaskTitle ? `<span class="dim">${escapeHTML(a.lastTaskTitle)}</span>` : '—')}${needs ? ` <span class="needs-mark">⚠ ${escapeHTML(needs.prompt)}</span>` : ''}</td>
               <td class="logcell dim">${a.lastLog?.message ? escapeHTML(a.lastLog.message) : ''}</td>

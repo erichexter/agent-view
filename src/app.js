@@ -12,6 +12,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
+app.use((err, req, res, next) => {
+  if (err && (err.type === 'entity.parse.failed' || err instanceof SyntaxError)) {
+    return res.status(400).json({ error: 'invalid json' });
+  }
+  next(err);
+});
 app.use((req, _res, next) => {
   if (process.env.AV_LOG === '1') console.log(req.method, req.url);
   next();
@@ -22,6 +28,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Health
 app.get('/api/health', (_req, res) => res.json({ ok: true, time: Date.now() }));
+app.get('/health', (_req, res) => res.json({ ok: true, time: Date.now() }));
 
 // Snapshot
 app.get('/api/snapshot', (_req, res) => res.json(snapshot()));
@@ -91,6 +98,7 @@ app.post('/api/events', (req, res) => {
   if (ev.nextCronAt !== undefined)  cronPatch.nextCronAt  = ev.nextCronAt;
   if (ev.nextCronName !== undefined) cronPatch.nextCronName = ev.nextCronName;
   if (ev.tag !== undefined) cronPatch.tag = ev.tag;
+  if (ev.remoteUrl !== undefined) cronPatch.remoteUrl = ev.remoteUrl;
   let agent;
   let task;
 
@@ -105,6 +113,7 @@ app.post('/api/events', (req, res) => {
         name,
         status: ev.status || derived,
         meta: ev.meta || prev?.meta,
+        lastHeartbeatAt: Date.now(),
         ...cronPatch,
       });
       recordHeartbeat(agentId);
@@ -120,10 +129,12 @@ app.post('/api/events', (req, res) => {
         title: ev.title || 'Untitled task',
         detail: ev.detail || '',
         startedAt: Date.now(),
+        stallAfterMs: Number.isFinite(ev.stallAfterMs) ? ev.stallAfterMs : null,
       };
       startTask(agentId, t);
       agent = upsertAgent(agentId, {
-        name, status: 'working', currentTask: t, needsInput: null, ...cronPatch,
+        name, status: 'working', currentTask: t, needsInput: null,
+        stallAfterMs: t.stallAfterMs, ...cronPatch,
       });
       task = t;
       break;
@@ -168,6 +179,7 @@ app.post('/api/events', (req, res) => {
         status: 'idle',
         currentTask: null,
         needsInput: null,
+        stallAfterMs: null,
         completedCount: (prev.completedCount || 0) + 1,
         totalTokens: (prev.totalTokens || 0) + (record.tokens || 0),
         ...cronPatch,
