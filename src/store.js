@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+const DATA_DIR = process.env.AGENT_VIEW_DATA_DIR || path.join(process.cwd(), 'data');
 const TASKS_FILE = path.join(DATA_DIR, 'tasks.jsonl');
 const AGENTS_FILE = path.join(DATA_DIR, 'agents.json');
 
@@ -26,6 +26,7 @@ const BURN_WINDOW_MS = 5 * 60 * 1000;
 
 function persistAgents() {
   // Strip in-memory-only fields (token window samples) before writing to disk.
+  // _heartbeats ARE persisted (they're useful across restarts).
   const out = [...agents.values()].map(a => {
     const { _tokenWindow, ...rest } = a;
     return rest;
@@ -44,8 +45,8 @@ function burnRate(agent) {
 
 function withDerived(agent) {
   if (!agent) return agent;
-  const { _tokenWindow, ...rest } = agent;
-  return { ...rest, burnRate: burnRate(agent) };
+  const { _tokenWindow, _heartbeats, ...rest } = agent;
+  return { ...rest, burnRate: burnRate(agent), heartbeats: _heartbeats || [] };
 }
 
 export function recordTokens(agentId, tokens) {
@@ -56,6 +57,22 @@ export function recordTokens(agentId, tokens) {
   // prune to keep memory bounded
   const cutoff = Date.now() - BURN_WINDOW_MS;
   while (a._tokenWindow.length && a._tokenWindow[0].t < cutoff) a._tokenWindow.shift();
+}
+
+export function recordHeartbeat(agentId) {
+  const a = agents.get(agentId);
+  if (!a) return;
+  const pings = a._heartbeats || [];
+  pings.push(Date.now());
+  // Keep last 48 pings
+  if (pings.length > 48) pings.splice(0, pings.length - 48);
+  a._heartbeats = pings;
+  persistAgents();
+}
+
+export function getHeartbeats(agentId) {
+  const a = agents.get(agentId);
+  return a?._heartbeats || [];
 }
 
 function loadCompleted() {
@@ -105,10 +122,12 @@ export function upsertAgent(id, patch) {
     tag: null,
     lastLog: null,
   };
-  // Preserve the in-memory token window when patching.
+  // Preserve the in-memory token window and heartbeats when patching.
   const _tokenWindow = existing._tokenWindow;
+  const _heartbeats = existing._heartbeats;
   const next = { ...existing, ...patch, lastSeen: now };
   if (_tokenWindow) next._tokenWindow = _tokenWindow;
+  if (_heartbeats) next._heartbeats = _heartbeats;
   agents.set(id, next);
   persistAgents();
   return withDerived(next);
