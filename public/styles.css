@@ -380,3 +380,58 @@ td.when { color: var(--fg-muted); }
 @keyframes blink { 50% { opacity: 0; } }
 
 .empty { color: var(--fg-muted); font-style: italic; padding: 14px; border: 1px dashed var(--border); border-radius: 2px; }
+
+/* ─── History row expansion ──────────────────────────────────────── */
+#historyTable tbody tr.history-row { cursor: pointer; }
+#historyTable tbody tr.history-row:hover td { background: rgba(107,255,143,0.05); }
+
+.task-detail {
+  background: #04070a;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 10px 14px;
+  margin: 2px 0;
+}
+.task-detail-header {
+  color: var(--fg-muted);
+  font-size: 10.5px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+  opacity: 0.6;
+  margin-bottom: 8px;
+}
+.task-detail-body {
+  color: var(--fg);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: normal;
+}
+.task-detail-body h1,
+.task-detail-body h2,
+.task-detail-body h3 { color: var(--accent); margin: 8px 0 4px; font-size: 13px; }
+.task-detail-body p { color: var(--fg); margin: 4px 0; }
+.task-detail-body code { background: #02050a; color: var(--accent); padding: 1px 5px; border-radius: 2px; }
+.task-detail-body pre { background: #02050a; padding: 8px; border-radius: 2px; overflow-x: auto; }
+.task-detail-body pre code { background: none; padding: 0; }
+.task-detail-body ul, .task-detail-body ol { padding-left: 20px; margin: 4px 0; }
+.task-detail-body li { color: var(--fg); margin: 2px 0; }
+.task-detail-body li::marker { color: var(--fg-muted); }
+.task-detail-meta {
+  color: var(--fg-muted);
+  font-size: 11px;
+  margin-top: 8px;
+  border-top: 1px dashed var(--border-2);
+  padding-top: 6px;
+}
+
+/* ─── Heartbeat sparkline ────────────────────────────────────────── */
+.heartbeat-strip {
+  margin-top: 6px; font-size: 11px;
+  display: flex; gap: 1px; align-items: center;
+  color: var(--fg-muted);
+}
+.hb-label { margin-right: 6px; color: var(--fg-muted); }
+.hb-dot { cursor: default; }
+.hb-dot.hb-on { color: var(--accent); }
+.hb-dot.hb-off { color: var(--fg-muted); opacity: 0.35; }
