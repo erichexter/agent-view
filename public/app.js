@@ -1,3 +1,5 @@
+import { fmtRel, fmtDur, fmtCountdown, fmtTokens, fmtTime, escapeHTML } from './utils.js';
+
 const grid = document.getElementById('agentGrid');
 const empty = document.getElementById('emptyAgents');
 const tabs = document.getElementById('agentTabs');
@@ -42,7 +44,11 @@ const state = {
   agents: new Map(),
   prevWaiting: new Set(),
   order: JSON.parse(localStorage.getItem(ORDER_KEY) || '[]'),
+  expandedTaskId: null,
 };
+// Cache of taskId → task object for history expansion
+const historyCache = new Map();
+
 function persistOrder() { localStorage.setItem(ORDER_KEY, JSON.stringify(state.order)); }
 function reconcileOrder(ids) {
   // Keep known order; append any new ids; drop ids no longer present.
@@ -114,6 +120,13 @@ document.addEventListener('keydown', e => {
   // after a click and would otherwise swallow our shortcuts.
   if (e.target.matches('input[type="text"], input[type="search"], textarea, [contenteditable]')) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === 'Escape') {
+    if (state.expandedTaskId) {
+      state.expandedTaskId = null;
+      loadHistory();
+    }
+    return;
+  }
   if (e.key === 's' || e.key === 'S') { soundToggle.checked = !soundToggle.checked; flash('sound: ' + (soundToggle.checked ? 'on' : 'off')); }
   if (e.key === 'n' || e.key === 'N') { notifyToggle.checked = !notifyToggle.checked; notifyToggle.dispatchEvent(new Event('change')); flash('notify: ' + (notifyToggle.checked ? 'on' : 'off')); }
   if (e.key === 'r' || e.key === 'R') { loadHistory(); flash('history reloaded'); }
@@ -154,63 +167,34 @@ function flash(msg) {
   flashTimer = setTimeout(() => { footerStatus.textContent = 'ready'; }, 2000);
 }
 
-/* ── Helpers ── */
-function fmtRel(ts) {
-  if (!ts) return '—';
-  const diff = Date.now() - ts;
-  if (diff < 1000) return 'now';
-  const s = Math.floor(diff / 1000);
-  if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return new Date(ts).toLocaleString();
-}
-function fmtDur(ms) {
-  if (ms == null) return '—';
-  if (ms < 1000) return `${ms}ms`;
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const rem = s % 60;
-  return rem ? `${m}m ${rem}s` : `${m}m`;
-}
-function fmtCountdown(ts) {
-  if (!ts) return null;
-  let ms = ts - Date.now();
-  if (ms <= 0) return 'now';
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const rs = s % 60;
-  if (m < 60) return rs ? `${m}m ${rs}s` : `${m}m`;
-  const h = Math.floor(m / 60);
-  const rm = m % 60;
-  if (h < 24) return rm ? `${h}h ${rm}m` : `${h}h`;
-  const d = Math.floor(h / 24);
-  return `${d}d ${h % 24}h`;
-}
-function fmtTokens(n) {
-  if (n == null) return '—';
-  if (n < 1000) return String(n);
-  if (n < 1_000_000) return (n / 1000).toFixed(1) + 'k';
-  return (n / 1_000_000).toFixed(2) + 'M';
-}
-function fmtTime(ts) {
-  const d = new Date(ts);
-  return d.toLocaleTimeString([], { hour12: false });
-}
-function escapeHTML(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-}
-
 /* ── Clock ── */
 function tickClock() {
   const d = new Date();
   clockEl.textContent = d.toLocaleTimeString([], { hour12: false });
 }
 setInterval(tickClock, 1000); tickClock();
+
+/* ── Heartbeat sparkline ── */
+function renderHeartbeatStrip(heartbeats) {
+  if (!heartbeats || !heartbeats.length) return '';
+  const now = Date.now();
+  const HOUR_MS = 60 * 60 * 1000;
+  const BUCKETS = 24;
+  const spans = [];
+  for (let i = BUCKETS - 1; i >= 0; i--) {
+    const bucketEnd = now - i * HOUR_MS;
+    const bucketStart = bucketEnd - HOUR_MS;
+    const hasHit = heartbeats.some(ts => ts >= bucketStart && ts < bucketEnd);
+    const d = new Date(bucketEnd);
+    const hhmm = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    if (hasHit) {
+      spans.push(`<span class="hb-dot hb-on" title="${hhmm}">●</span>`);
+    } else {
+      spans.push(`<span class="hb-dot hb-off" title="${hhmm}">·</span>`);
+    }
+  }
+  return `<span class="hb-label">ping</span>${spans.join('')}`;
+}
 
 /* ── Rendering ── */
 function renderTriage() {
@@ -306,6 +290,7 @@ function render() {
       ? `<div class="logline" data-rel-ts="${a.lastLog.ts}" title="${escapeHTML(new Date(a.lastLog.ts).toLocaleString())}">
            <span class="k">log</span> ${escapeHTML(a.lastLog.message)}
          </div>` : '';
+    const heartbeatStrip = renderHeartbeatStrip(a.heartbeats || []);
     return `
       <div class="${klass}" data-id="${escapeHTML(a.id)}" draggable="true">
         <div class="barhead">
@@ -317,6 +302,7 @@ function render() {
         <div class="body">
           <div class="task">${taskBlock}</div>
           ${log}
+          ${heartbeatStrip ? `<div class="heartbeat-strip">${heartbeatStrip}</div>` : ''}
           ${needsBlock}
           <div class="meta-row">
             ${since || lastSeen}
@@ -475,18 +461,61 @@ function applyAgent(a) {
   else if (before?.needsInput) clearAlert(a.id);
 }
 
+/* ── History with markdown expansion ── */
 async function loadHistory() {
   const r = await fetch('/api/tasks?limit=100').then(r => r.json());
-  histBody.innerHTML = r.map(t => `
-    <tr>
+  // Rebuild historyCache
+  historyCache.clear();
+  for (const t of r) historyCache.set(t.taskId, t);
+
+  histBody.innerHTML = r.map(t => {
+    const isExpanded = state.expandedTaskId === t.taskId;
+    const expandGlyph = isExpanded ? '▼' : '';
+    const rows = [`
+    <tr class="history-row" data-task-id="${escapeHTML(t.taskId || '')}" title="click to expand" style="cursor:pointer">
       <td class="when">${escapeHTML(fmtTime(t.finishedAt))}</td>
       <td class="agent">${escapeHTML(t.agentId)}</td>
       <td>${escapeHTML(t.title || '')}${t.summary ? `<div style="color:var(--fg-muted);font-size:11px">${escapeHTML(t.summary)}</div>` : ''}</td>
       <td class="dur">${fmtDur(t.durationMs)}</td>
       <td class="tokens">${fmtTokens(t.tokens)}</td>
-      <td class="${t.result === 'error' ? 'result-error' : 'result-ok'}">${escapeHTML(t.result || 'ok')}</td>
-    </tr>
-  `).join('');
+      <td class="${t.result === 'error' ? 'result-error' : 'result-ok'}">${escapeHTML(t.result || 'ok')} ${expandGlyph}</td>
+    </tr>`];
+
+    if (isExpanded) {
+      const mdSource = t.detail || t.summary || '';
+      const rendered = (typeof marked !== 'undefined' && mdSource)
+        ? marked.parse(mdSource)
+        : escapeHTML(mdSource);
+      const tokIn = t.tokensIn != null ? t.tokensIn.toLocaleString() : '—';
+      const tokOut = t.tokensOut != null ? t.tokensOut.toLocaleString() : '—';
+      const dur = fmtDur(t.durationMs);
+      const when = t.finishedAt ? new Date(t.finishedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short', hour12: false }) : '—';
+      rows.push(`
+    <tr class="expand-row">
+      <td colspan="6">
+        <div class="task-detail">
+          <div class="task-detail-header">TASK DETAIL ── [esc to close]</div>
+          <div class="task-detail-body">${rendered}</div>
+          <div class="task-detail-meta">in: ${tokIn}  │  out: ${tokOut}  │  ${dur}  │  ${escapeHTML(when)}</div>
+        </div>
+      </td>
+    </tr>`);
+    }
+    return rows.join('');
+  }).join('');
+
+  // Attach click handlers to history rows
+  histBody.querySelectorAll('.history-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const taskId = row.dataset.taskId;
+      if (state.expandedTaskId === taskId) {
+        state.expandedTaskId = null;
+      } else {
+        state.expandedTaskId = taskId;
+      }
+      loadHistory();
+    });
+  });
 }
 
 function connect() {
